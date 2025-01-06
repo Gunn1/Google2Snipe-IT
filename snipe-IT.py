@@ -3,6 +3,7 @@ import json
 from dotenv import load_dotenv
 import os
 import googleAuth
+import gemini
 # Load environment variables from .env file
 load_dotenv()
 
@@ -28,13 +29,33 @@ def create_hardware(asset_tag, status_name, model_name,macAddress,createdDate, u
        status_id = 5
     model_id = get_model_id(model_name, api_key)
 
+    # Create model if not found
+    if not model_id:
+      print(f"Model '{model_name}' not found. Creating new model...")
+      category_name = gemini.gemini_prompt(f"""Given the following technology model,Model: {model_name} select the most appropriate category from this list:
+IMac,Tablets,Mobile Devices,Servers,Networking Equipment,Printers & Scanners,Desktop,Chromebook
+""")    
+      category = get_category_id(category_name)
 
+      model_data = {'name': model_name}
+      url = f"{base_url}/models"
+      headers = {'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'}
+      model_response = requests.post(url, json=model_data, headers=headers)
+      if model_response.status_code == 201:
+        # Extract model ID from successful response
+        model_data = model_response.json()
+        model_id = model_data['data']['id']
+        print(f"Model created successfully. ID: {model_id}")
+      else:
+        print(f"Failed to create model: {model_response.text}")
+        return None, None  # Or handle the error differently
 
     hardware = {
 
         'assetTag': asset_tag, #Required This is the serial number of the hardware.
         'modelId': model_id, #Required This is the model id of the hardware.
         'statusId': status_id, # Required This is the status id.
+        'serial': asset_tag,
         '_snipeit_mac_address_1': macAddress, #Optional
         '_snipeit_setupdate_2': createdDate, #Optional
         '_snipeit_ip_address_3': ipAddress, #Optional
@@ -43,7 +64,9 @@ def create_hardware(asset_tag, status_name, model_name,macAddress,createdDate, u
 
 
     url = f"{base_url}/hardware" 
-    headers = {'Content-Type': 'application/json'}
+    headers = {
+       'Authorization': f'Bearer {api_key}',
+       'Content-Type': 'application/json'}
     response = requests.post(url, json=hardware, headers=headers)
     return response.status_code, response.text
 def get_model_id(name: str, api_key: str, base_url: str = base_url):
@@ -63,7 +86,9 @@ def get_model_id(name: str, api_key: str, base_url: str = base_url):
   url = f"{base_url}/models?search={name}"
 
   # Set headers with the API key
-  headers = {'Authorization': f'Bearer {api_key}'}
+  headers = {'Authorization': f'Bearer {api_key}',
+             'Content-Type': 'application/json'
+             }
 
   try:
     # Send a GET request to the API endpoint
@@ -74,8 +99,6 @@ def get_model_id(name: str, api_key: str, base_url: str = base_url):
       data = json.loads(response.content)
       # Extract the ID from the first matching model (assuming unique names)
       if data['rows']:
-        print(data['rows'])
-
         return data['rows'][0]['id']
       else:
         print(f"No model found with name: {name}")
@@ -105,7 +128,9 @@ def get_status_id(name: str, api_key: str, base_url: str = base_url):
     url = f"{base_url}/statuslabels"
 
     # Set headers with the API key
-    headers = {'Authorization': f'Bearer {api_key}'}
+    headers = {'Authorization': f'Bearer {api_key}',
+               'Content-Type': 'application/json'
+               }
 
     # Prepare the query parameters
     params = {'name': name}
@@ -118,7 +143,6 @@ def get_status_id(name: str, api_key: str, base_url: str = base_url):
         if response.status_code == 200:
             data = json.loads(response.content)
             # Extract the ID from the first matching status (assuming unique names)
-            print(data)
             if data['rows']:
                 return data['rows'][0]['id']
             else:
@@ -147,7 +171,9 @@ def get_user_id(email: str, api_key: str, base_url: str = base_url):
   """
   try:
     url = f"{base_url}/users"
-    headers = {'Authorization': f'Bearer {api_key}'}
+    headers = {'Authorization': f'Bearer {api_key}',
+               'Content-Type': 'application/json'
+               }
     params = {'email': email} 
     response = requests.get(url, headers=headers, params=params)
 
@@ -170,6 +196,8 @@ def get_user_id(email: str, api_key: str, base_url: str = base_url):
 def check_out_device(user):
     pass
 def check_in_device():
+    pass
+def get_category_id():
     pass
 
 if __name__ == '__main__':
