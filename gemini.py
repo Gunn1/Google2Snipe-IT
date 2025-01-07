@@ -13,6 +13,9 @@ model = genai.GenerativeModel("gemini-1.5-flash")
 def gemini_prompt(prompt):
     response = model.generate_content(prompt)
     return response
-print(gemini_prompt("""Given the following technology model,Model: Dell Chromebook 11 (3180) select the most appropriate category from this list:
+
+category_name = gemini_prompt("""Given the following technology model,Model: Dell Chromebook 11 (3180) select the most appropriate category from this list:
 IMac,Tablets,Mobile Devices,Servers,Networking Equipment,Printers & Scanners,Desktop,Chromebook
-""").text)
+""").text
+category_name = category_name.split('**')[1]
+print(category_name)

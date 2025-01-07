@@ -1,2 +1,5 @@
 google-api-python-client 
 google-auth
+python-dotenv
+google_auth_oauthlib
+google-generativeai

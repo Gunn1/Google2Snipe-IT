@@ -141,4 +141,4 @@ def fetch_and_print_chromeos_devices():
     print(f'An error occurred while interacting with the API: {error}')
 
 if __name__ == '__main__':
-  fetch_and_print_chromeos_devices()
+  print(fetch_and_print_chromeos_devices())
