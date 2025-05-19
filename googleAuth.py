@@ -55,44 +55,50 @@ def fetch_and_print_chromeos_devices():
   """
 
   creds = auth()
-
   if not creds:
-    print("Authentication failed. Exiting.")
-    return
+      print("Authentication failed. Exiting.")
+      return []
 
   try:
-    service = build('admin', 'directory_v1', credentials=creds)
+      service = build('admin', 'directory_v1', credentials=creds)
+      device_data = []
+      page_token = None
 
-    results = service.chromeosdevices().list(
-        customerId='my_customer',  # Use "my_customer" for the current user's domain
-        maxResults=1500,
-        orderBy='lastSync',
-        sortOrder='DESCENDING',
-        projection='FULL').execute()
+      while True:
+          results = service.chromeosdevices().list(
+              customerId='my_customer',
+              maxResults=300,
+              orderBy='lastSync',
+              sortOrder='DESCENDING',
+              projection='FULL',
+              pageToken=page_token
+          ).execute()
 
-    devices = results.get('chromeosdevices', [])
-    device_data = []
-    if not devices:
-      print('No Chrome OS devices found.')
-    else:
-      print('Chrome OS devices:')
-      for device in devices:
-        device_info = {
-          'Device User': device.get("recentUsers", [{}])[0].get("email"),
-          'Serial Number': device.get("serialNumber"),
-          'Status': device.get("status"),
-          'Last Sync Time': device.get("lastSync"),
-          'Model': device.get("model"),
-          'Active Time Ranges': device.get("activeTimeRanges"),
-          'Mac Address': device.get("macAddress"),
-          'Last Known IP Address': device.get("lastKnownNetwork", [{}])[0].get("ipAddress"),
-          'First Enrollment Time': device.get("firstEnrollmentTime") 
-        }
-        device_data.append(device_info)
+          devices = results.get('chromeosdevices', [])
+          for device in devices:
+              device_info = {
+                  'Device User': device.get("recentUsers", [{}])[0].get("email"),
+                  'Serial Number': device.get("serialNumber"),
+                  'Status': device.get("status"),
+                  'Last Sync Time': device.get("lastSync"),
+                  'Model': device.get("model"),
+                  'Active Time Ranges': device.get("activeTimeRanges"),
+                  'Mac Address': device.get("macAddress"),
+                  'Last Known IP Address': device.get("lastKnownNetwork", [{}])[0].get("ipAddress"),
+                  'First Enrollment Time': device.get("firstEnrollmentTime")
+              }
+              device_data.append(device_info)
+
+          # Check if more pages exist
+          page_token = results.get('nextPageToken')
+          if not page_token:
+              break
+
       return device_data
 
   except Exception as error:
-    print(f'An error occurred while interacting with the API: {error}')
+      print(f'An error occurred while interacting with the API: {error}')
+      return []
 
 if __name__ == '__main__':
-  print(fetch_and_print_chromeos_devices())
+  print(len(fetch_and_print_chromeos_devices()))
