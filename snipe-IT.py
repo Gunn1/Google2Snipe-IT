@@ -481,15 +481,21 @@ if __name__ == '__main__':
 
     # Wrap loop with tqdm progress bar
     for idx, device in enumerate(tqdm(devicedata, desc="Processing Devices", unit="device"), start=1):
+        try:
+            active_time = device.get('Active Time Ranges')[0].get('date')
+        except:
+            logging.error("Active Time Not Set")
+            active_time = None
+
+
         serial = device.get('Serial Number')
         status = device.get('Status')
         model = device.get('Model')
         mac = device.get('Mac Address')
-        setup_date = device.get('First Enrollment Time')
         user = device.get('Device User')
         ip = device.get('Last Known IP Address')
 
-        status_code, result = create_hardware(serial, status, model, mac, setup_date, user, ip)
+        status_code, result = create_hardware(serial, status, model, mac, active_time, user, ip)
 
         # Optional: log errors if needed
         if status_code != 200:
