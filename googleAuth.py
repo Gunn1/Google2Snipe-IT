@@ -1,85 +1,39 @@
 from googleapiclient.discovery import build
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
+from google.oauth2 import service_account
 import os
-# If modifying these scopes, delete the file token.json.
+
+# Define the required scope
 SCOPES = ['https://www.googleapis.com/auth/admin.directory.device.chromeos']
 
+# Path to the service account key file
+SERVICE_ACCOUNT_FILE = 'service_account.json'
+
+# The admin email to impersonate (for domain-wide delegation)
+DELEGATED_ADMIN = 'tgunnadmin@clearbrook-gonvick.k12.mn.us'  # ← Replace with your admin account
 
 def bytes_to_gb(bytes_value):
-  """Converts bytes to gigabytes.
-
-  Args:
-    bytes_value: The number of bytes to convert.
-
-  Returns:
-    The number of gigabytes.
-  """
+  """Converts bytes to gigabytes."""
   return bytes_value / (1024 * 1024 * 1024)
 
 def auth():
   """
-  Performs OAuth 2.0 authentication for the Google Admin SDK.
-
-  This function handles the following:
-
-    1. **Load Credentials:** 
-       - Attempts to load existing credentials from 'token.json'.
-       - Handles potential errors during loading.
-
-    2. **Refresh Credentials:**
-       - If the existing credentials are expired but have a refresh token, 
-         attempts to refresh them.
-       - Handles potential errors during the refresh process.
-
-    3. **Initiate OAuth 2.0 Flow:** 
-       - If no valid credentials are found, initiates the OAuth 2.0 flow 
-         using 'credentials.json' to obtain user consent.
-       - Handles potential errors during the OAuth 2.0 flow.
-
-    4. **Save Credentials:**
-       - Saves the obtained or refreshed credentials to 'token.json' for future use.
-       - Handles potential errors during credential saving.
+  Authenticates using a Google service account with domain-wide delegation.
 
   Returns:
-    - `google.oauth2.credentials.Credentials`: The authenticated credentials 
-      object on successful authentication.
-    - `None`: If an error occurs at any stage of the authentication process.
+    google.auth.credentials.Credentials: Authenticated credentials object.
   """
+  try:
+    credentials = service_account.Credentials.from_service_account_file(
+        SERVICE_ACCOUNT_FILE,
+        scopes=SCOPES)
 
-  creds = None
-  if os.path.exists('token.json'):
-    try:
-      creds = Credentials.from_authorized_user_file('token.json', SCOPES)
-    except Exception as e:
-      print(f"Error loading credentials from token.json: {e}")
-      return None
+    # Enable domain-wide delegation
+    delegated_credentials = credentials.with_subject(DELEGATED_ADMIN)
+    return delegated_credentials
 
-  if not creds or not creds.valid:
-    if creds and creds.expired and creds.refresh_token:
-      try:
-        creds.refresh(Request())
-      except Exception as e:
-        print(f"Error refreshing access token: {e}")
-        return None
-    else:
-      try:
-        flow = InstalledAppFlow.from_client_secrets_file(
-            'credentials.json', SCOPES)  # Replace with your credentials file
-        creds = flow.run_local_server(port=0)
-      except Exception as e:
-        print(f"Error during OAuth 2.0 flow: {e}")
-        return None
-
-    try:
-      with open('token.json', 'w') as token:
-        token.write(creds.to_json())
-    except Exception as e:
-      print(f"Error saving credentials to token.json: {e}")
-      return None
-
-  return creds
+  except Exception as e:
+    print(f"Error loading service account credentials: {e}")
+    return None
 
 def fetch_and_print_chromeos_devices():
   """
@@ -111,9 +65,9 @@ def fetch_and_print_chromeos_devices():
 
     results = service.chromeosdevices().list(
         customerId='my_customer',  # Use "my_customer" for the current user's domain
-        maxResults=600,
+        maxResults=1500,
         orderBy='lastSync',
-        sortOrder='ASCENDING',
+        sortOrder='DESCENDING',
         projection='FULL').execute()
 
     devices = results.get('chromeosdevices', [])
