@@ -172,3 +172,4 @@ cython_debug/
 credentials.json
 token.json
 service_account.json
+mosyle_test.py

@@ -84,7 +84,7 @@ def hardware_exists(asset_tag, serial, api_key, base_url=base_url):
             if item.get('serial') == serial or item.get('asset_tag') == asset_tag:
                 return True
     return False
-def update_hardware(asset_tag, model_id, status_id, macAddress=None, createdDate=None, ipAddress=None, last_User=None, api_key=api_key, base_url=base_url):
+def update_hardware(asset_tag, model_id, status_id, macAddress=None, createdDate=None, ipAddress=None, last_User=None,eol=None, api_key=api_key, base_url=base_url):
     """
     Updates an existing hardware asset in Snipe-IT using asset tag or serial.
 
@@ -138,6 +138,9 @@ def update_hardware(asset_tag, model_id, status_id, macAddress=None, createdDate
         update_payload['_snipeit_ip_address_3'] = ipAddress
     if last_User:
         update_payload['_snipeit_user_10'] = last_User
+    if eol:
+        print(f'EOL {eol}')
+        update_payload['eol'] = eol
 
     hardware_id = matched_device['id']
     update_url = f"{base_url}/hardware/{hardware_id}"
@@ -148,6 +151,7 @@ def update_hardware(asset_tag, model_id, status_id, macAddress=None, createdDate
     }
 
     update_response = response = retry_request("PATCH", update_url, headers=patch_headers, json=update_payload)
+
     try:
         response_data = update_response.json()
     except ValueError:
@@ -189,7 +193,7 @@ def assign_fieldset_to_model(model_id, fieldset_id, api_key, base_url=base_url):
 
 import time
 
-def create_hardware(asset_tag, status_name, model_name, macAddress, createdDate, userEmail=None, ipAddress=None):
+def create_hardware(asset_tag, status_name, model_name, macAddress, createdDate, userEmail=None, ipAddress=None, eol=None):
     # if userEmail:
     #     userId = get_user_id(userEmail, api_key)
     # else:
@@ -202,7 +206,7 @@ def create_hardware(asset_tag, status_name, model_name, macAddress, createdDate,
         status_id = 5
 
     model_id = get_model_id(model_name, api_key)
-
+    macAddress = format_mac(macAddress)
     if not model_id:
         tqdm.write(f"Model '{model_name}' not found. Creating new model...")
         if model_name is None:
@@ -295,7 +299,8 @@ IMac,Tablets,Mobile Devices,Servers,Networking Equipment,Printers & Scanners,Des
                 macAddress=macAddress,
                 createdDate=createdDate,
                 ipAddress=ipAddress,
-                last_User=userEmail
+                last_User=userEmail,
+                eol=eol
             )
             return 200, "Updated existing asset."
         else:
@@ -311,33 +316,37 @@ def get_model_id(name: str, api_key: str, base_url: str = base_url):
   Retrieves the ID of a model in Snipe-IT using the provided name and API key.
 
   Args:
-      name (str): The name of the model to search for.
+      name (str): The exact name of the model to search for.
       api_key (str): Your Snipe-IT API key.
-      base_url (str, optional): The base URL of your Snipe-IT instance. Defaults to "https://your-snipeit-url/api/v1".
+      base_url (str, optional): The base URL of your Snipe-IT instance.
 
   Returns:
       int: The ID of the model if found, otherwise None.
   """
 
-  # Construct the API endpoint URL with search parameter
+  import requests
+  import json
+  from tqdm import tqdm
+
   url = f"{base_url}/models?search={name}"
 
-  # Set headers with the API key
-  headers = {'Authorization': f'Bearer {api_key}',
-             'Content-Type': 'application/json'
-             }
+  headers = {
+    'Authorization': f'Bearer {api_key}',
+    'Content-Type': 'application/json'
+  }
 
   try:
-    # Send a GET request to the API endpoint
     response = retry_request("GET", url, headers=headers)
 
-
-    # Check for successful response (200 OK)
     if response.status_code == 200:
       data = json.loads(response.content)
-      # Extract the ID from the first matching model (assuming unique names)
       if data['rows']:
-        return data['rows'][0]['id']
+        # Try to match exact name (case-insensitive)
+        for model in data['rows']:
+          if model['name'].strip().lower() == name.strip().lower():
+            return model['id']
+        tqdm.write(f"No exact model match found for: {name}. Returning closest match.")
+        return data['rows'][0]['id']  # Fallback if exact match not found
       else:
         tqdm.write(f"No model found with name: {name}")
         return None
@@ -349,6 +358,7 @@ def get_model_id(name: str, api_key: str, base_url: str = base_url):
   except requests.exceptions.RequestException as e:
     tqdm.write(f"An error occurred while making the API request: {e}")
     return None
+
 def get_status_id(name: str, api_key: str, base_url: str = base_url):
     """
     Retrieves the ID of a status in Snipe-IT using the provided name and API key.
@@ -494,8 +504,9 @@ if __name__ == '__main__':
         mac = device.get('Mac Address')
         user = device.get('Device User')
         ip = device.get('Last Known IP Address')
+        eol = device.get('EOL')
 
-        status_code, result = create_hardware(serial, status, model, mac, active_time, user, ip)
+        status_code, result = create_hardware(serial, status, model, mac, active_time, user, ip, eol)
 
         # Optional: log errors if needed
         if status_code != 200:

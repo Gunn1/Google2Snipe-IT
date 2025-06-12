@@ -85,7 +85,8 @@ def fetch_and_print_chromeos_devices():
                   'Active Time Ranges': device.get("activeTimeRanges"),
                   'Mac Address': device.get("macAddress"),
                   'Last Known IP Address': device.get("lastKnownNetwork", [{}])[0].get("ipAddress"),
-                  'First Enrollment Time': device.get("firstEnrollmentTime")
+                  'First Enrollment Time': device.get("firstEnrollmentTime"),
+                  'EOL': device.get('autoUpdateThrough')
               }
               device_data.append(device_info)
 
