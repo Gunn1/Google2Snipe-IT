@@ -213,7 +213,7 @@ def create_hardware(asset_tag, status_name, model_name, macAddress, createdDate,
             model_id = default_model_id
         else:
             category_name = gemini.gemini_prompt(f"""Given the following technology model,Model: {model_name} select the most appropriate category from this list:
-IMac,Tablets,Mobile Devices,Servers,Networking Equipment,Printers & Scanners,Desktop,Chromebook
+iMac,Tablets,Mobile Devices,Servers,Networking Equipment,Printers & Scanners,Desktop,Chromebook
 """).text  
 
             if '**' in category_name:
