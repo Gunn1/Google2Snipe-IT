@@ -450,16 +450,16 @@ def check_in_device():
     pass
 def get_category_id(name: str, api_key: str, base_url: str = base_url):
     """
-    Retrieves the ID of a user in Snipe-IT using the provided email and API key.
+    Retrieves the ID of a category in Snipe-IT using the provided name and API key.
 
     Args:
-        email (str): The email address of the user.
+        name (str): The name of the category.
         api_key (str): Your Snipe-IT API key.
-        base_url (str, optional): The base URL of your Snipe-IT instance. 
+        base_url (str, optional): The base URL of your Snipe-IT instance.
             Defaults to "https://your-snipeit-url/api/v1".
 
     Returns:
-        int: The ID of the user if found, otherwise None.
+        int: The ID of the category if found, otherwise None.
     """
     try:
         url = f"{base_url}/categories"
