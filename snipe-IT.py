@@ -150,14 +150,15 @@ def update_hardware(asset_tag, model_id, status_id, macAddress=None, createdDate
         'Accept': 'application/json'
     }
 
-    update_response = response = retry_request("PATCH", update_url, headers=patch_headers, json=update_payload)
+    update_response = retry_request("PATCH", update_url, headers=patch_headers, json=update_payload)
+
 
     try:
         response_data = update_response.json()
     except ValueError:
         tqdm.write("Failed to parse JSON from Snipe-IT hardware response.")
-        tqdm.write(f"Raw response: {response.text}")
-        return response.status_code, response.text
+        tqdm.write(f"Raw response: {update_response.text}")
+        return update_response.status_code, update_response.text
     
     if update_response.status_code == 200 and response_data.get("status") == "success":
         tqdm.write(f"Updated hardware: {asset_tag}")
@@ -268,7 +269,7 @@ IMac,Tablets,Mobile Devices,Servers,Networking Equipment,Printers & Scanners,Des
     # Retry logic
     max_attempts = 4
     for attempt in range(1, max_attempts + 1):
-        response = response = retry_request("POST", url, headers=headers, json=hardware)
+        response = retry_request("POST", url, headers=headers, json=hardware)
 
 
         if response.status_code != 429:
