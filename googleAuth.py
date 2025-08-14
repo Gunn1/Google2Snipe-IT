@@ -1,15 +1,20 @@
 from googleapiclient.discovery import build
 from google.oauth2 import service_account
 import os
+from dotenv import load_dotenv
+import os
 
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Access the variable
+DELEGATED_ADMIN = os.getenv("DELEGATED_ADMIN") 
 # Define the required scope
 SCOPES = ['https://www.googleapis.com/auth/admin.directory.device.chromeos']
 
 # Path to the service account key file
 SERVICE_ACCOUNT_FILE = 'service_account.json'
-
-# The admin email to impersonate (for domain-wide delegation)
-DELEGATED_ADMIN = 'tgunnadmin@clearbrook-gonvick.k12.mn.us'  # ← Replace with your admin account
 
 def bytes_to_gb(bytes_value):
   """Converts bytes to gigabytes."""

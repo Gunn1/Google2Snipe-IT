@@ -50,6 +50,7 @@ Create a `.env` file:
 ```
 API_TOKEN=your_snipeit_api_key
 ENDPOINT_URL=https://your-snipeit-url/api/v1
+Gemini_APIKEY=apikey
 ```
 
 ### 3. Place Your Service Account Key
