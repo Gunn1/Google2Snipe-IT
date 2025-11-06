@@ -113,19 +113,44 @@ check_existing_setup() {
         print_warning "Virtual environment already exists at $VENV_DIR"
         if ! ask_yes_no "Do you want to recreate it"; then
             print_info "Skipping venv recreation"
-            return
+            SKIP_VENV_SETUP=true
+        else
+            print_info "Removing existing venv..."
+            rm -rf "$VENV_DIR"
         fi
-        print_info "Removing existing venv..."
-        rm -rf "$VENV_DIR"
     fi
 
     if [ -f "$ENV_FILE" ]; then
         print_warning "Configuration file already exists at $ENV_FILE"
-        if ! ask_yes_no "Do you want to overwrite it"; then
+        if ! ask_yes_no "Do you want to reconfigure it"; then
             print_info "Keeping existing configuration"
+            SKIP_CONFIG_PROMPTS=true
+            load_existing_env
             return
         fi
     fi
+}
+
+load_existing_env() {
+    print_info "Loading existing configuration from $ENV_FILE..."
+
+    # Source the .env file to load variables
+    # Use grep and sed to extract values safely
+    API_TOKEN=$(grep "^API_TOKEN=" "$ENV_FILE" | cut -d'=' -f2-)
+    ENDPOINT_URL=$(grep "^ENDPOINT_URL=" "$ENV_FILE" | cut -d'=' -f2-)
+    DEFAULT_MODEL_ID=$(grep "^SNIPE_IT_DEFAULT_MODEL_ID=" "$ENV_FILE" | cut -d'=' -f2-)
+    MAC_FIELD=$(grep "^SNIPE_IT_FIELD_MAC_ADDRESS=" "$ENV_FILE" | cut -d'=' -f2-)
+    SYNC_DATE_FIELD=$(grep "^SNIPE_IT_FIELD_SYNC_DATE=" "$ENV_FILE" | cut -d'=' -f2-)
+    IP_FIELD=$(grep "^SNIPE_IT_FIELD_IP_ADDRESS=" "$ENV_FILE" | cut -d'=' -f2-)
+    USER_FIELD=$(grep "^SNIPE_IT_FIELD_USER=" "$ENV_FILE" | cut -d'=' -f2-)
+    FIELDSET_ID=$(grep "^SNIPE_IT_FIELDSET_ID=" "$ENV_FILE" | cut -d'=' -f2-)
+    DELEGATED_ADMIN=$(grep "^DELEGATED_ADMIN=" "$ENV_FILE" | cut -d'=' -f2-)
+    SERVICE_ACCOUNT_PATH=$(grep "^GOOGLE_SERVICE_ACCOUNT_FILE=" "$ENV_FILE" | cut -d'=' -f2-)
+    PAGE_SIZE=$(grep "^GOOGLE_CHROMEOS_PAGE_SIZE=" "$ENV_FILE" | cut -d'=' -f2-)
+    GEMINI_API_KEY=$(grep "^Gemini_APIKEY=" "$ENV_FILE" | cut -d'=' -f2-)
+    ENVIRONMENT=$(grep "^ENVIRONMENT=" "$ENV_FILE" | cut -d'=' -f2-)
+
+    print_success "Configuration loaded from existing .env file"
 }
 
 ################################################################################
@@ -552,19 +577,34 @@ main() {
     # Run setup steps
     check_prerequisites
     check_existing_setup
-    setup_venv
-    install_dependencies
+
+    # Only setup venv if not skipped
+    if [ "$SKIP_VENV_SETUP" != "true" ]; then
+        setup_venv
+        install_dependencies
+    else
+        print_info "Using existing virtual environment"
+    fi
 
     # shellcheck disable=SC1091
     source "$VENV_DIR/bin/activate"
 
-    prompt_environment
-    prompt_snipeit_config
-    prompt_google_config
-    prompt_gemini_config
+    # Only prompt for configuration if not skipped
+    if [ "$SKIP_CONFIG_PROMPTS" != "true" ]; then
+        prompt_environment
+        prompt_snipeit_config
+        prompt_google_config
+        prompt_gemini_config
 
-    if [ "$ENVIRONMENT" = "production" ]; then
-        prompt_schedule
+        if [ "$ENVIRONMENT" = "production" ]; then
+            prompt_schedule
+        fi
+    else
+        print_info "Using existing configuration from .env file"
+        # Still prompt for schedule if production mode wasn't set in .env
+        if [ "$ENVIRONMENT" = "production" ] && [ -z "$SCHEDULE" ]; then
+            prompt_schedule
+        fi
     fi
 
     create_env_file
