@@ -220,6 +220,11 @@ prompt_google_config() {
     read -p "Path to service_account.json (default: ./service_account.json): " -r SERVICE_ACCOUNT_PATH
     SERVICE_ACCOUNT_PATH=${SERVICE_ACCOUNT_PATH:-service_account.json}
 
+    # Resolve relative path to absolute path
+    if [[ "$SERVICE_ACCOUNT_PATH" != /* ]]; then
+        SERVICE_ACCOUNT_PATH="$(cd "$(dirname "$SERVICE_ACCOUNT_PATH")" && pwd)/$(basename "$SERVICE_ACCOUNT_PATH")"
+    fi
+
     # Check if service account file exists
     if [ ! -f "$SERVICE_ACCOUNT_PATH" ]; then
         print_warning "Service account file not found at: $SERVICE_ACCOUNT_PATH"
@@ -228,10 +233,16 @@ prompt_google_config() {
             exit 1
         fi
     else
-        # Copy or link service account file
+        # Copy service account file to project directory if not already there
         if [ "$SERVICE_ACCOUNT_PATH" != "$SCRIPT_DIR/service_account.json" ]; then
-            cp "$SERVICE_ACCOUNT_PATH" "$SCRIPT_DIR/service_account.json"
-            print_success "Service account file copied to project directory"
+            print_info "Copying service account file to project directory..."
+            if ! cp "$SERVICE_ACCOUNT_PATH" "$SCRIPT_DIR/service_account.json" 2>/dev/null; then
+                print_warning "Could not copy file (it may already be in the correct location)"
+            else
+                print_success "Service account file copied to project directory"
+            fi
+        else
+            print_success "Service account file is already in the correct location"
         fi
     fi
 
