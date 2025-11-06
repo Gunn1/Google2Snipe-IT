@@ -465,9 +465,32 @@ SYSTEMD_TIMER
         if ! id "_google2snipeit" &>/dev/null; then
             print_info "Creating service user '_google2snipeit'..."
             useradd -r -s /bin/false _google2snipeit 2>/dev/null || true
-            chown _google2snipeit:_google2snipeit "$SCRIPT_DIR" -R
             print_success "Service user created"
         fi
+
+        # Set proper permissions for service user to access project directory
+        print_info "Setting permissions for service user..."
+
+        # Make directory readable and executable by service user
+        chmod 755 "$SCRIPT_DIR"
+
+        # Give service user read/execute access to all files via ACL
+        if command -v setfacl &>/dev/null; then
+            setfacl -R -m u:_google2snipeit:rx "$SCRIPT_DIR"
+            setfacl -R -m u:_google2snipeit:r "$SCRIPT_DIR"/.env 2>/dev/null || true
+            setfacl -R -m u:_google2snipeit:r "$SCRIPT_DIR"/service_account.json 2>/dev/null || true
+            print_success "ACL permissions set for service user"
+        else
+            # Fallback if setfacl not available - use group permissions
+            print_warning "setfacl not available, using group permissions instead"
+            chmod -R g+rx "$SCRIPT_DIR"
+            chmod g+r "$SCRIPT_DIR"/.env 2>/dev/null || true
+            chmod g+r "$SCRIPT_DIR"/service_account.json 2>/dev/null || true
+        fi
+
+        # Ensure .env and service_account.json are readable
+        chmod 644 "$SCRIPT_DIR"/.env 2>/dev/null || true
+        chmod 644 "$SCRIPT_DIR"/service_account.json 2>/dev/null || true
 
         # Prompt to enable and start timer
         if ask_yes_no "Enable and start the timer now"; then
@@ -477,9 +500,17 @@ SYSTEMD_TIMER
             print_info "Check timer status with: systemctl status google2snipeit.timer"
         fi
     else
-        print_warning "SystemD files created at ${SYSTEMD_DIR}/ but require root to install"
-        print_info "To install, run: sudo install -m 644 ${SYSTEMD_DIR}/*.service ${SYSTEMD_DIR}/*.timer /etc/systemd/system/"
-        print_info "Then run: sudo systemctl daemon-reload"
+        print_warning "Not running as root. SystemD files will be created but not fully configured."
+        print_info "To complete installation, run these commands as root:"
+        echo ""
+        echo "  sudo install -m 644 ${SYSTEMD_DIR}/*.service /etc/systemd/system/"
+        echo "  sudo install -m 644 ${SYSTEMD_DIR}/*.timer /etc/systemd/system/"
+        echo "  sudo useradd -r -s /bin/false _google2snipeit 2>/dev/null || true"
+        echo "  sudo setfacl -R -m u:_google2snipeit:rx $SCRIPT_DIR"
+        echo "  sudo systemctl daemon-reload"
+        echo "  sudo systemctl enable google2snipeit.timer"
+        echo "  sudo systemctl start google2snipeit.timer"
+        echo ""
     fi
 }
 
