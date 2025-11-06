@@ -1,28 +1,32 @@
 import requests
 import json
-from dotenv import load_dotenv
-import os
-import googleAuth
-import gemini
+import logging
 import time
 from tqdm import tqdm
-import logging
+
+import googleAuth
+import gemini
+from config import Config
+
+# Validate configuration before proceeding
+is_valid, errors = Config.validate()
+if not is_valid:
+    for error in errors:
+        print(f"Configuration Error: {error}")
+    exit(1)
 
 # Setup logging
 logging.basicConfig(
-    filename='snipeit_errors.log',
-    level=logging.WARNING,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    filename=Config.LOG_FILE,
+    level=getattr(logging, Config.LOG_LEVEL),
+    format=Config.LOG_FORMAT
 )
-# Load environment variables from .env file
-load_dotenv()
+logger = logging.getLogger(__name__)
 
-# Access the variable
-api_key = os.getenv("API_TOKEN") 
-base_url = os.getenv("ENDPOINT_URL")
-
-#No Model ID Default
-default_model_id = 87
+# Create convenience variables
+api_key = Config.API_TOKEN
+base_url = Config.ENDPOINT_URL
+default_model_id = Config.SNIPE_IT_DEFAULT_MODEL_ID
 
 
 
@@ -131,15 +135,15 @@ def update_hardware(asset_tag, model_id, status_id, macAddress=None, createdDate
 
     # Add custom fields if present
     if macAddress:
-        update_payload['_snipeit_mac_address_1'] = macAddress
+        update_payload[Config.SNIPE_IT_FIELD_MAC_ADDRESS] = macAddress
     if createdDate:
-        update_payload['_snipeit_sync_date_9'] = createdDate
+        update_payload[Config.SNIPE_IT_FIELD_SYNC_DATE] = createdDate
     if ipAddress:
-        update_payload['_snipeit_ip_address_3'] = ipAddress
+        update_payload[Config.SNIPE_IT_FIELD_IP_ADDRESS] = ipAddress
     if last_User:
-        update_payload['_snipeit_user_10'] = last_User
+        update_payload[Config.SNIPE_IT_FIELD_USER] = last_User
     if eol:
-        print(f'EOL {eol}')
+        tqdm.write(f'EOL {eol}')
         update_payload['eol'] = eol
 
     hardware_id = matched_device['id']
@@ -201,10 +205,11 @@ def create_hardware(asset_tag, status_name, model_name, macAddress, createdDate,
     #     userId = None
 
     try:
-        status_id = 2 if status_name == 'ACTIVE' else get_status_id(status_name, api_key)
+        status_id = Config.SNIPE_IT_DEFAULT_STATUS_ID if status_name == Config.SNIPE_IT_ACTIVE_STATUS else get_status_id(status_name, api_key)
     except Exception as e:
         tqdm.write(f"Status lookup failed: {e}")
-        status_id = 5
+        logger.error(f"Status lookup error for status_name '{status_name}': {e}")
+        status_id = Config.SNIPE_IT_DEFAULT_STATUS_ID
 
     model_id = get_model_id(model_name, api_key)
     macAddress = format_mac(macAddress)
@@ -213,8 +218,8 @@ def create_hardware(asset_tag, status_name, model_name, macAddress, createdDate,
         if model_name is None:
             model_id = default_model_id
         else:
-            category_name = gemini.gemini_prompt(f"""Given the following technology model,Model: {model_name} select the most appropriate category from this list:
-IMac,Tablets,Mobile Devices,Servers,Networking Equipment,Printers & Scanners,Desktop,Chromebook
+            category_name = gemini.gemini_prompt(f"""Given the following technology model, Model: {model_name} select the most appropriate category from this list:
+{Config.GEMINI_CATEGORIES}
 """).text  
 
             if '**' in category_name:
@@ -241,7 +246,7 @@ IMac,Tablets,Mobile Devices,Servers,Networking Equipment,Printers & Scanners,Des
                 model_payload = response_data.get('payload', {})
                 model_id = model_payload.get('id')
                 tqdm.write(f"Model created successfully: {model_payload.get('name')}")
-                assign_fieldset_to_model(model_id, fieldset_id=9, api_key=api_key)
+                assign_fieldset_to_model(model_id, fieldset_id=Config.SNIPE_IT_FIELDSET_ID, api_key=api_key)
             else:
                 tqdm.write(f"Failed to create model: {response_data}")
                 return
@@ -252,10 +257,10 @@ IMac,Tablets,Mobile Devices,Servers,Networking Equipment,Printers & Scanners,Des
         'model_id': model_id,
         'status_id': status_id,
         'serial': asset_tag,
-        '_snipeit_mac_address_1': macAddress,
-        '_snipeit_sync_date_9': createdDate,
-        '_snipeit_ip_address_3': ipAddress,
-        '_snipeit_user_10': userEmail
+        Config.SNIPE_IT_FIELD_MAC_ADDRESS: macAddress,
+        Config.SNIPE_IT_FIELD_SYNC_DATE: createdDate,
+        Config.SNIPE_IT_FIELD_IP_ADDRESS: ipAddress,
+        Config.SNIPE_IT_FIELD_USER: userEmail
     }
 
     url = f"{base_url}/hardware"

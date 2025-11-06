@@ -1,20 +1,10 @@
 from googleapiclient.discovery import build
 from google.oauth2 import service_account
-import os
-from dotenv import load_dotenv
-import os
 
+from config import Config
 
-# Load environment variables from .env file
-load_dotenv()
-
-# Access the variable
-DELEGATED_ADMIN = os.getenv("DELEGATED_ADMIN") 
 # Define the required scope
 SCOPES = ['https://www.googleapis.com/auth/admin.directory.device.chromeos']
-
-# Path to the service account key file
-SERVICE_ACCOUNT_FILE = 'service_account.json'
 
 def bytes_to_gb(bytes_value):
   """Converts bytes to gigabytes."""
@@ -29,13 +19,16 @@ def auth():
   """
   try:
     credentials = service_account.Credentials.from_service_account_file(
-        SERVICE_ACCOUNT_FILE,
+        Config.GOOGLE_SERVICE_ACCOUNT_FILE,
         scopes=SCOPES)
 
     # Enable domain-wide delegation
-    delegated_credentials = credentials.with_subject(DELEGATED_ADMIN)
+    delegated_credentials = credentials.with_subject(Config.GOOGLE_DELEGATED_ADMIN)
     return delegated_credentials
 
+  except FileNotFoundError as e:
+    print(f"Error: Service account file not found at '{Config.GOOGLE_SERVICE_ACCOUNT_FILE}': {e}")
+    return None
   except Exception as e:
     print(f"Error loading service account credentials: {e}")
     return None
@@ -72,10 +65,10 @@ def fetch_and_print_chromeos_devices():
       while True:
           results = service.chromeosdevices().list(
               customerId='my_customer',
-              maxResults=300,
+              maxResults=Config.GOOGLE_CHROMEOS_PAGE_SIZE,
               orderBy='lastSync',
               sortOrder='DESCENDING',
-              projection='FULL',
+              projection=Config.GOOGLE_CHROMEOS_PROJECTION,
               pageToken=page_token
           ).execute()
 
