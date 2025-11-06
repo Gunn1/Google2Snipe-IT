@@ -1,15 +1,10 @@
-from dotenv import load_dotenv
-import os
 import google.generativeai as genai
 
+from config import Config
 
-# Load environment variables from .env file
-load_dotenv()
-
-# Access the variable
-api_key = os.getenv("Gemini_APIKEY") 
-genai.configure(api_key=api_key)
-model = genai.GenerativeModel("gemini-1.5-flash")
+# Configure Gemini API
+genai.configure(api_key=Config.GEMINI_API_KEY)
+model = genai.GenerativeModel(Config.GEMINI_MODEL)
 
 
 def gemini_prompt(prompt: str):
@@ -18,10 +13,8 @@ def gemini_prompt(prompt: str):
 
 
 if __name__ == "__main__":
-    example_prompt = (
-        """Given the following technology model,Model: Dell Chromebook 11 (3180) select the most appropriate category from this list:
-IMac,Tablets,Mobile Devices,Servers,Networking Equipment,Printers & Scanners,Desktop,Chromebook"""
-    )
+    example_prompt = f"""Given the following technology model, Model: Dell Chromebook 11 (3180) select the most appropriate category from this list:
+{Config.GEMINI_CATEGORIES}"""
     category_name = gemini_prompt(example_prompt).text
     if "**" in category_name:
         category_name = category_name.split("**")[1].strip()
