@@ -405,6 +405,10 @@ create_systemd_files() {
         SYSTEMD_DIR="/etc/systemd/system"
     fi
 
+    # Determine which user to run the service as
+    # If running via sudo, use the original user; otherwise use current user
+    local SERVICE_USER="${SUDO_USER:-$USER}"
+
     local service_content
     service_content=$(cat << 'SYSTEMD_SERVICE'
 [Unit]
@@ -413,7 +417,7 @@ After=network.target
 
 [Service]
 Type=oneshot
-User=_google2snipeit
+User=%SERVICE_USER%
 WorkingDirectory=%WORKING_DIR%
 Environment="PATH=%VENV_BIN%:$PATH"
 ExecStart=%VENV_BIN%/python %SCRIPT_DIR%/snipe-IT.py
@@ -426,6 +430,7 @@ SYSTEMD_SERVICE
     )
 
     # Replace placeholders
+    service_content="${service_content//%SERVICE_USER%/$SERVICE_USER}"
     service_content="${service_content//%WORKING_DIR%/$SCRIPT_DIR}"
     service_content="${service_content//%VENV_BIN%/$VENV_DIR/bin}"
     service_content="${service_content//%SCRIPT_DIR%/$SCRIPT_DIR}"
@@ -461,36 +466,15 @@ SYSTEMD_TIMER
         systemctl daemon-reload
         print_success "SystemD files installed and reloaded"
 
-        # Create service user if needed
-        if ! id "_google2snipeit" &>/dev/null; then
-            print_info "Creating service user '_google2snipeit'..."
-            useradd -r -s /bin/false _google2snipeit 2>/dev/null || true
-            print_success "Service user created"
-        fi
-
-        # Set proper permissions for service user to access project directory
-        print_info "Setting permissions for service user..."
-
-        # Make directory readable and executable by service user
+        print_info "Verifying permissions..."
+        # Ensure project directory is accessible
         chmod 755 "$SCRIPT_DIR"
 
-        # Give service user read/execute access to all files via ACL
-        if command -v setfacl &>/dev/null; then
-            setfacl -R -m u:_google2snipeit:rx "$SCRIPT_DIR"
-            setfacl -R -m u:_google2snipeit:r "$SCRIPT_DIR"/.env 2>/dev/null || true
-            setfacl -R -m u:_google2snipeit:r "$SCRIPT_DIR"/service_account.json 2>/dev/null || true
-            print_success "ACL permissions set for service user"
-        else
-            # Fallback if setfacl not available - use group permissions
-            print_warning "setfacl not available, using group permissions instead"
-            chmod -R g+rx "$SCRIPT_DIR"
-            chmod g+r "$SCRIPT_DIR"/.env 2>/dev/null || true
-            chmod g+r "$SCRIPT_DIR"/service_account.json 2>/dev/null || true
-        fi
+        # Ensure .env and service_account.json are readable (but not world-readable for security)
+        chmod 640 "$SCRIPT_DIR"/.env 2>/dev/null || true
+        chmod 640 "$SCRIPT_DIR"/service_account.json 2>/dev/null || true
 
-        # Ensure .env and service_account.json are readable
-        chmod 644 "$SCRIPT_DIR"/.env 2>/dev/null || true
-        chmod 644 "$SCRIPT_DIR"/service_account.json 2>/dev/null || true
+        print_success "Permissions configured for $SERVICE_USER"
 
         # Prompt to enable and start timer
         if ask_yes_no "Enable and start the timer now"; then
@@ -505,8 +489,6 @@ SYSTEMD_TIMER
         echo ""
         echo "  sudo install -m 644 ${SYSTEMD_DIR}/*.service /etc/systemd/system/"
         echo "  sudo install -m 644 ${SYSTEMD_DIR}/*.timer /etc/systemd/system/"
-        echo "  sudo useradd -r -s /bin/false _google2snipeit 2>/dev/null || true"
-        echo "  sudo setfacl -R -m u:_google2snipeit:rx $SCRIPT_DIR"
         echo "  sudo systemctl daemon-reload"
         echo "  sudo systemctl enable google2snipeit.timer"
         echo "  sudo systemctl start google2snipeit.timer"
