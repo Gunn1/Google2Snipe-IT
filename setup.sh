@@ -99,8 +99,9 @@ check_prerequisites() {
     python_version=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
     print_info "Python version: $python_version"
 
-    if [[ $(echo "$python_version < 3.8" | bc) -eq 1 ]]; then
-        print_error "Python 3.8+ is required"
+    # Use awk for proper numeric version comparison
+    if ! awk -v ver="$python_version" 'BEGIN { exit !(ver >= 3.8) }'; then
+        print_error "Python 3.8+ is required (you have $python_version)"
         exit 1
     fi
 }
