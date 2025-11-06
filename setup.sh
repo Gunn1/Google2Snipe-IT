@@ -265,43 +265,47 @@ prompt_schedule() {
     echo "  3) Every hour"
     echo "  4) Every 4 hours"
     echo "  5) Every day at 2 AM"
-    echo "  6) Custom schedule (cron format)"
+    echo "  6) Custom schedule"
 
     while true; do
         read -p "Enter choice (1-6): " -r schedule_choice
         case "$schedule_choice" in
             1)
-                SCHEDULE="*:0/15"
+                SCHEDULE="OnUnitActiveSec=15min"
                 TIMER_DESCRIPTION="Run every 15 minutes"
                 print_success "Schedule set to every 15 minutes"
                 break
                 ;;
             2)
-                SCHEDULE="*:0/30"
+                SCHEDULE="OnUnitActiveSec=30min"
                 TIMER_DESCRIPTION="Run every 30 minutes"
                 print_success "Schedule set to every 30 minutes"
                 break
                 ;;
             3)
-                SCHEDULE="*:00"
+                SCHEDULE="OnUnitActiveSec=1h"
                 TIMER_DESCRIPTION="Run every hour"
                 print_success "Schedule set to every hour"
                 break
                 ;;
             4)
-                SCHEDULE="0/4:00"
+                SCHEDULE="OnUnitActiveSec=4h"
                 TIMER_DESCRIPTION="Run every 4 hours"
                 print_success "Schedule set to every 4 hours"
                 break
                 ;;
             5)
-                SCHEDULE="02:00"
+                SCHEDULE="OnCalendar=*-*-* 02:00:00"
                 TIMER_DESCRIPTION="Run daily at 2 AM"
                 print_success "Schedule set to daily at 2 AM"
                 break
                 ;;
             6)
-                read -p "Enter systemd timer schedule (e.g., *:00/30 for every 30 mins): " -r SCHEDULE
+                echo "Examples:"
+                echo "  OnUnitActiveSec=30min       - Every 30 minutes"
+                echo "  OnCalendar=*-*-* 02:00:00   - Daily at 2 AM"
+                echo "  OnCalendar=Mon-Fri *-*-* 09:00:00 - Weekdays at 9 AM"
+                read -p "Enter systemd schedule line: " -r SCHEDULE
                 read -p "Enter description: " -r TIMER_DESCRIPTION
                 print_success "Custom schedule set"
                 break
@@ -412,7 +416,7 @@ Requires=google2snipeit.service
 
 [Timer]
 OnBootSec=5min
-OnUnitActiveSec=%SCHEDULE%
+%SCHEDULE%
 Unit=google2snipeit.service
 Persistent=true
 
@@ -421,7 +425,7 @@ WantedBy=timers.target
 SYSTEMD_TIMER
     )
 
-    # Replace placeholders
+    # Replace placeholders (SCHEDULE now includes the full line like "OnUnitActiveSec=15min")
     timer_content="${timer_content//%SCHEDULE%/$SCHEDULE}"
 
     echo "$timer_content" > "${SYSTEMD_DIR}/google2snipeit.timer"
