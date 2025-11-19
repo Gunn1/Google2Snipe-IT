@@ -1,30 +1,12 @@
 [Unit]
 Description=Google2Snipe-IT ChromeOS Device Sync Service
 After=network.target
-Documentation=file:///path/to/project/README.md
 
 [Service]
 Type=oneshot
-User=_google2snipeit
-WorkingDirectory=/path/to/project
-Environment="PATH=/path/to/project/venv/bin:$PATH"
-ExecStart=/path/to/project/venv/bin/python /path/to/project/snipe-IT.py
-
-# Security hardening
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/path/to/project/snipeit_errors.log
-
-# Logging
+User=%SERVICE_USER%
+WorkingDirectory=%WORKING_DIR%
+EnvironmentFile=%WORKING_DIR%/.env
+ExecStart=%VENV_BIN%/python %SCRIPT_DIR%/snipe-IT.py
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=google2snipeit
-
-# Resource limits (optional - adjust based on your environment)
-MemoryLimit=512M
-CPUQuota=50%
-
-[Install]
-WantedBy=multi-user.target

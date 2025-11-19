@@ -281,67 +281,6 @@ prompt_gemini_config() {
     read -p "Gemini API Key: " -r GEMINI_API_KEY
 }
 
-prompt_schedule() {
-    print_header "Scheduling Configuration (Production Only)"
-
-    echo "Select how often to run the sync:"
-    echo "  1) Every 15 minutes"
-    echo "  2) Every 30 minutes"
-    echo "  3) Every hour"
-    echo "  4) Every 4 hours"
-    echo "  5) Every day at 2 AM"
-    echo "  6) Custom schedule"
-
-    while true; do
-        read -p "Enter choice (1-6): " -r schedule_choice
-        case "$schedule_choice" in
-            1)
-                SCHEDULE="OnUnitActiveSec=15min"
-                TIMER_DESCRIPTION="Run every 15 minutes"
-                print_success "Schedule set to every 15 minutes"
-                break
-                ;;
-            2)
-                SCHEDULE="OnUnitActiveSec=30min"
-                TIMER_DESCRIPTION="Run every 30 minutes"
-                print_success "Schedule set to every 30 minutes"
-                break
-                ;;
-            3)
-                SCHEDULE="OnUnitActiveSec=1h"
-                TIMER_DESCRIPTION="Run every hour"
-                print_success "Schedule set to every hour"
-                break
-                ;;
-            4)
-                SCHEDULE="OnUnitActiveSec=4h"
-                TIMER_DESCRIPTION="Run every 4 hours"
-                print_success "Schedule set to every 4 hours"
-                break
-                ;;
-            5)
-                SCHEDULE="OnCalendar=*-*-* 02:00:00"
-                TIMER_DESCRIPTION="Run daily at 2 AM"
-                print_success "Schedule set to daily at 2 AM"
-                break
-                ;;
-            6)
-                echo "Examples:"
-                echo "  OnUnitActiveSec=30min       - Every 30 minutes"
-                echo "  OnCalendar=*-*-* 02:00:00   - Daily at 2 AM"
-                echo "  OnCalendar=Mon-Fri *-*-* 09:00:00 - Weekdays at 9 AM"
-                read -p "Enter systemd schedule line: " -r SCHEDULE
-                read -p "Enter description: " -r TIMER_DESCRIPTION
-                print_success "Custom schedule set"
-                break
-                ;;
-            *)
-                print_error "Invalid choice"
-                ;;
-        esac
-    done
-}
-
 create_env_file() {
     print_header "Creating Configuration File"
 
@@ -409,25 +348,13 @@ create_systemd_files() {
     # If running via sudo, use the original user; otherwise use current user
     local SERVICE_USER="${SUDO_USER:-$USER}"
 
-    local service_content
-    service_content=$(cat << 'SYSTEMD_SERVICE'
-[Unit]
-Description=Google2Snipe-IT Sync Service
-After=network.target
+    # Read the service template from the systemd directory
+    if [ ! -f "$SCRIPT_DIR/systemd/google2snipeit.service.template" ]; then
+        print_error "Service template not found at $SCRIPT_DIR/systemd/google2snipeit.service.template"
+        return 1
+    fi
 
-[Service]
-Type=oneshot
-User=%SERVICE_USER%
-WorkingDirectory=%WORKING_DIR%
-Environment="PATH=%VENV_BIN%:$PATH"
-ExecStart=%VENV_BIN%/python %SCRIPT_DIR%/snipe-IT.py
-StandardOutput=journal
-StandardError=journal
-
-[Install]
-WantedBy=multi-user.target
-SYSTEMD_SERVICE
-    )
+    service_content=$(cat "$SCRIPT_DIR/systemd/google2snipeit.service.template")
 
     # Replace placeholders
     service_content="${service_content//%SERVICE_USER%/$SERVICE_USER}"
@@ -438,25 +365,13 @@ SYSTEMD_SERVICE
     echo "$service_content" > "${SYSTEMD_DIR}/google2snipeit.service"
     print_success "Service file created"
 
-    local timer_content
-    timer_content=$(cat << 'SYSTEMD_TIMER'
-[Unit]
-Description=Google2Snipe-IT Sync Timer
-Requires=google2snipeit.service
+    # Read the timer template from the systemd directory
+    if [ ! -f "$SCRIPT_DIR/systemd/google2snipeit.timer.template" ]; then
+        print_error "Timer template not found at $SCRIPT_DIR/systemd/google2snipeit.timer.template"
+        return 1
+    fi
 
-[Timer]
-OnBootSec=5min
-%SCHEDULE%
-Unit=google2snipeit.service
-Persistent=true
-
-[Install]
-WantedBy=timers.target
-SYSTEMD_TIMER
-    )
-
-    # Replace placeholders (SCHEDULE now includes the full line like "OnUnitActiveSec=15min")
-    timer_content="${timer_content//%SCHEDULE%/$SCHEDULE}"
+    timer_content=$(cat "$SCRIPT_DIR/systemd/google2snipeit.timer.template")
 
     echo "$timer_content" > "${SYSTEMD_DIR}/google2snipeit.timer"
     print_success "Timer file created"
@@ -555,6 +470,11 @@ print_next_steps() {
         echo "  4. View recent sync logs:"
         echo "     journalctl -u google2snipeit.service -f"
         echo ""
+        echo "  Timer Schedule:"
+        echo "     - Runs daily at 2:00 AM"
+        echo "     - Runs 1 minute after system boot"
+        echo "     - Will catch up if system was offline"
+        echo ""
         echo "  To manually trigger a sync:"
         echo "     systemctl start google2snipeit.service"
     else
@@ -608,16 +528,8 @@ main() {
         prompt_snipeit_config
         prompt_google_config
         prompt_gemini_config
-
-        if [ "$ENVIRONMENT" = "production" ]; then
-            prompt_schedule
-        fi
     else
         print_info "Using existing configuration from .env file"
-        # Still prompt for schedule if production mode wasn't set in .env
-        if [ "$ENVIRONMENT" = "production" ] && [ -z "$SCHEDULE" ]; then
-            prompt_schedule
-        fi
     fi
 
     create_env_file

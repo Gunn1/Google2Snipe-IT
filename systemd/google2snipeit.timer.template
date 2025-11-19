@@ -1,35 +1,15 @@
 [Unit]
 Description=Google2Snipe-IT Sync Timer
-Documentation=file:///path/to/project/README.md
 Requires=google2snipeit.service
 
 [Timer]
-# Run 5 minutes after system boot
-OnBootSec=5min
-
-# Main schedule - choose ONE:
-# Every 15 minutes:
-OnUnitActiveSec=15min
-
-# Every 30 minutes:
-# OnUnitActiveSec=30min
-
-# Every hour:
-# OnUnitActiveSec=1h
-
-# Every 4 hours:
-# OnUnitActiveSec=4h
-
-# Every day at 2 AM:
-# OnCalendar=*-*-* 02:00:00
-
-# Weekdays at 9 AM:
-# OnCalendar=Mon-Fri *-*-* 09:00:00
-
-# Keep timer state persistent across reboots
+# Run 1 minute after boot if service was missed
+OnBootSec=1min
+# Run daily at 2:00 AM
+OnCalendar=*-*-* 02:00:00
+# Run immediately if timer was missed (e.g., system was off)
 Persistent=true
-
-# The service to run
+# Unit to run
 Unit=google2snipeit.service
 
 [Install]

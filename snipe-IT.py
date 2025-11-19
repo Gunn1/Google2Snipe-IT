@@ -2,6 +2,7 @@ import requests
 import json
 import logging
 import time
+from datetime import datetime
 from tqdm import tqdm
 
 import googleAuth
@@ -15,11 +16,14 @@ if not is_valid:
         print(f"Configuration Error: {error}")
     exit(1)
 
-# Setup logging
+# Setup logging with both file and console output
 logging.basicConfig(
-    filename=Config.LOG_FILE,
-    level=getattr(logging, Config.LOG_LEVEL),
-    format=Config.LOG_FORMAT
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(Config.LOG_FILE),
+        logging.StreamHandler()
+    ]
 )
 logger = logging.getLogger(__name__)
 
@@ -27,6 +31,37 @@ logger = logging.getLogger(__name__)
 api_key = Config.API_TOKEN
 base_url = Config.ENDPOINT_URL
 default_model_id = Config.SNIPE_IT_DEFAULT_MODEL_ID
+
+
+class SyncStatistics:
+    """Tracks sync statistics for reporting."""
+    def __init__(self):
+        self.total_devices = 0
+        self.successful = 0
+        self.failed = 0
+        self.created = 0
+        self.updated = 0
+        self.start_time = None
+        self.end_time = None
+
+    def get_duration(self):
+        """Returns sync duration in seconds."""
+        if self.start_time and self.end_time:
+            return (self.end_time - self.start_time).total_seconds()
+        return 0
+
+    def print_summary(self):
+        """Prints a formatted summary of sync statistics."""
+        logger.info("=" * 70)
+        logger.info("SYNC SUMMARY")
+        logger.info("=" * 70)
+        logger.info(f"Total devices processed: {self.total_devices}")
+        logger.info(f"  ✓ Successful: {self.successful}")
+        logger.info(f"  ✗ Failed: {self.failed}")
+        logger.info(f"  → Created: {self.created}")
+        logger.info(f"  ↻ Updated: {self.updated}")
+        logger.info(f"Duration: {self.get_duration():.2f} seconds")
+        logger.info("=" * 70)
 
 
 
@@ -56,20 +91,17 @@ def retry_request(method, url, headers=None, json=None, params=None, retries=4, 
             response = requests.request(method, url, headers=headers, json=json, params=params)
             if response.status_code == 429:
                 msg = f"Rate limited on {url}. Attempt {attempt} of {retries}. Retrying in {delay} seconds..."
-                tqdm.write(msg)
-                logging.warning(msg)
+                logger.warning(msg)
                 time.sleep(delay)
                 continue
             return response
         except requests.RequestException as e:
             msg = f"Request error on {method} {url}: {e}"
-            tqdm.write(msg)
-            logging.error(msg)
+            logger.error(msg)
             time.sleep(delay)
-    
+
     msg = f"Max retries exceeded for {method} {url}"
-    tqdm.write(msg)
-    logging.error(msg)
+    logger.error(msg)
     return None
 
 
@@ -82,8 +114,7 @@ def hardware_exists(asset_tag, serial, api_key, base_url=base_url):
     
     response = retry_request("GET", url, headers=headers, params=params)
 
-
-    if response.status_code == 200:
+    if response and response.status_code == 200:
         for item in response.json().get('rows', []):
             if item.get('serial') == serial or item.get('asset_tag') == asset_tag:
                 return True
@@ -123,7 +154,7 @@ def update_hardware(asset_tag, model_id, status_id, macAddress=None, createdDate
             break
 
     if not matched_device:
-        tqdm.write(f"No matching device found for asset tag '{asset_tag}'")
+        logger.debug(f"No matching device found for asset tag '{asset_tag}'")
         return
 
     # Build updated fields
@@ -143,7 +174,7 @@ def update_hardware(asset_tag, model_id, status_id, macAddress=None, createdDate
     if last_User:
         update_payload[Config.SNIPE_IT_FIELD_USER] = last_User
     if eol:
-        tqdm.write(f'EOL {eol}')
+        logger.debug(f'EOL {eol}')
         update_payload['eol'] = eol
 
     hardware_id = matched_device['id']
@@ -156,18 +187,17 @@ def update_hardware(asset_tag, model_id, status_id, macAddress=None, createdDate
 
     update_response = retry_request("PATCH", update_url, headers=patch_headers, json=update_payload)
 
-
     try:
         response_data = update_response.json()
     except ValueError:
-        tqdm.write("Failed to parse JSON from Snipe-IT hardware response.")
-        tqdm.write(f"Raw response: {update_response.text}")
+        logger.error("Failed to parse JSON from Snipe-IT hardware response.")
+        logger.error(f"Raw response: {update_response.text}")
         return update_response.status_code, update_response.text
-    
+
     if update_response.status_code == 200 and response_data.get("status") == "success":
-        tqdm.write(f"Updated hardware: {asset_tag}")
+        logger.info(f"Updated hardware: {asset_tag}")
     else:
-        tqdm.write(f"Failed to update hardware: {update_response.status_code} - {update_response.text}")
+        logger.error(f"Failed to update hardware: {update_response.status_code} - {update_response.text}")
 
 
 def assign_fieldset_to_model(model_id, fieldset_id, api_key, base_url=base_url):
@@ -191,10 +221,10 @@ def assign_fieldset_to_model(model_id, fieldset_id, api_key, base_url=base_url):
     }
     response = retry_request("PATCH", url, headers=headers, json=data)
 
-    if response.status_code == 200:
-        tqdm.write(f"Fieldset successfully assigned to model {model_id}")
+    if response and response.status_code == 200:
+        logger.info(f"Fieldset successfully assigned to model {model_id}")
     else:
-        tqdm.write(f"Failed to assign fieldset: {response.status_code}, {response.text}")
+        logger.error(f"Failed to assign fieldset: {response.status_code if response else 'No response'}, {response.text if response else 'Connection failed'}")
 
 import time
 
@@ -205,16 +235,22 @@ def create_hardware(asset_tag, status_name, model_name, macAddress, createdDate,
     #     userId = None
 
     try:
-        status_id = Config.SNIPE_IT_DEFAULT_STATUS_ID if status_name == Config.SNIPE_IT_ACTIVE_STATUS else get_status_id(status_name, api_key)
+        if status_name == Config.SNIPE_IT_ACTIVE_STATUS:
+            status_id = Config.SNIPE_IT_DEFAULT_STATUS_ID
+        else:
+            status_id = get_status_id(status_name, api_key)
+            # Fallback to default if status not found
+            if status_id is None:
+                logger.debug(f"Status '{status_name}' not found in Snipe-IT. Using default status.")
+                status_id = Config.SNIPE_IT_DEFAULT_STATUS_ID
     except Exception as e:
-        tqdm.write(f"Status lookup failed: {e}")
         logger.error(f"Status lookup error for status_name '{status_name}': {e}")
         status_id = Config.SNIPE_IT_DEFAULT_STATUS_ID
 
     model_id = get_model_id(model_name, api_key)
     macAddress = format_mac(macAddress)
     if not model_id:
-        tqdm.write(f"Model '{model_name}' not found. Creating new model...")
+        logger.info(f"Model '{model_name}' not found. Creating new model...")
         if model_name is None:
             model_id = default_model_id
         else:
@@ -225,7 +261,7 @@ def create_hardware(asset_tag, status_name, model_name, macAddress, createdDate,
             if '**' in category_name:
                 category_name = category_name.split('**')[1].strip()
             else:
-                tqdm.write(f"Warning: '**' not found in Gemini response. Full response: '{category_name}'")
+                logger.warning(f"'**' not found in Gemini response. Full response: '{category_name}'")
                 category_name = category_name.strip()
 
             category_id = get_category_id(category_name, api_key)
@@ -334,6 +370,11 @@ def get_model_id(name: str, api_key: str, base_url: str = base_url):
   import json
   from tqdm import tqdm
 
+  # Handle None input early
+  if name is None:
+    tqdm.write("Model name is None. Returning None.")
+    return None
+
   url = f"{base_url}/models?search={name}"
 
   headers = {
@@ -378,6 +419,11 @@ def get_status_id(name: str, api_key: str, base_url: str = base_url):
         int: The ID of the status if found, otherwise None.
     """
 
+    # Handle None input early
+    if name is None:
+        tqdm.write("Status name is None. Using default status.")
+        return None
+
     # Construct the API endpoint URL
     url = f"{base_url}/statuslabels"
 
@@ -401,7 +447,7 @@ def get_status_id(name: str, api_key: str, base_url: str = base_url):
             if data['rows']:
                 return data['rows'][0]['id']
             else:
-                tqdm.write(f"No status found with name: {name}")
+                tqdm.write(f"No status found with name: {name}. Using default status.")
                 return None
         else:
             tqdm.write(f"API request failed with status code: {response.status_code}")
@@ -491,29 +537,52 @@ def get_category_id(name: str, api_key: str, base_url: str = base_url):
         return None
 
 if __name__ == '__main__':
-    devicedata = googleAuth.fetch_and_print_chromeos_devices()
-    total_devices = len(devicedata)
-    tqdm.write(f"Found {total_devices} devices to process...\n")
+    stats = SyncStatistics()
+    stats.start_time = datetime.now()
 
-    # Wrap loop with tqdm progress bar
-    for idx, device in enumerate(tqdm(devicedata, desc="Processing Devices", unit="device"), start=1):
-        try:
-            active_time = device.get('Active Time Ranges')[0].get('date')
-        except:
-            logging.error("Active Time Not Set")
-            active_time = None
+    try:
+        logger.info("=" * 70)
+        logger.info("Starting Google2Snipe-IT Sync")
+        logger.info("=" * 70)
 
+        devicedata = googleAuth.fetch_and_print_chromeos_devices()
+        stats.total_devices = len(devicedata)
+        logger.info(f"Found {stats.total_devices} devices to process")
 
-        serial = device.get('Serial Number')
-        status = device.get('Status')
-        model = device.get('Model')
-        mac = device.get('Mac Address')
-        user = device.get('Device User')
-        ip = device.get('Last Known IP Address')
-        eol = device.get('EOL')
+        # Wrap loop with tqdm progress bar
+        for idx, device in enumerate(tqdm(devicedata, desc="Processing Devices", unit="device"), start=1):
+            try:
+                active_time = device.get('Active Time Ranges')[0].get('date')
+            except:
+                logger.warning("Active Time Not Set")
+                active_time = None
 
-        status_code, result = create_hardware(serial, status, model, mac, active_time, user, ip, eol)
+            serial = device.get('Serial Number')
+            status = device.get('Status')
+            model = device.get('Model')
+            mac = device.get('Mac Address')
+            user = device.get('Device User')
+            ip = device.get('Last Known IP Address')
+            eol = device.get('EOL')
 
-        # Optional: log errors if needed
-        if status_code != 200:
-            tqdm.write(f"\n[!] Error on {serial}: {result}")
+            status_code, result = create_hardware(serial, status, model, mac, active_time, user, ip, eol)
+
+            # Track statistics
+            if status_code == 200:
+                stats.successful += 1
+                if isinstance(result, dict) and result.get('payload'):
+                    # Check if it was an update or create based on response
+                    if 'Updated existing' in str(result):
+                        stats.updated += 1
+                    else:
+                        stats.created += 1
+            else:
+                stats.failed += 1
+                logger.error(f"Error on {serial}: {result}")
+
+    except Exception as e:
+        logger.exception(f"Fatal error during sync: {e}")
+        exit(1)
+    finally:
+        stats.end_time = datetime.now()
+        stats.print_summary()
