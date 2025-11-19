@@ -6,11 +6,18 @@ Tests configuration validation, defaults, and environment variable handling.
 import unittest
 import os
 import sys
+import types
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+# Mock dotenv before importing config
+if 'dotenv' not in sys.modules:
+    dotenv_mod = types.ModuleType('dotenv')
+    setattr(dotenv_mod, 'load_dotenv', MagicMock())
+    sys.modules['dotenv'] = dotenv_mod
 
 
 class TestConfigValidation(unittest.TestCase):
@@ -133,13 +140,7 @@ class TestConfigValidation(unittest.TestCase):
         self.assertFalse(is_valid)
         self.assertIn("Gemini_APIKEY environment variable is required", errors)
 
-    @patch.dict(os.environ, {
-        'API_TOKEN': 'test-token',
-        'ENDPOINT_URL': 'http://test.local/api/v1',
-        'DELEGATED_ADMIN': 'admin@example.com',
-        'Gemini_APIKEY': 'gemini-key',
-        'GOOGLE_SERVICE_ACCOUNT_FILE': '/tmp/service_account.json'
-    }, clear=True)
+    @patch.dict(os.environ, {}, clear=True)
     @patch('config.os.path.exists')
     def test_validate_multiple_errors(self, mock_exists):
         """Test validation collects multiple errors."""

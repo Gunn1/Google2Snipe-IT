@@ -1,0 +1,49 @@
+name: Run Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Create dummy service account
+      run: |
+        echo '{}' > service_account.json
+
+    - name: Run unit tests
+      env:
+        API_TOKEN: test
+        ENDPOINT_URL: http://test.local/api/v1
+        DELEGATED_ADMIN: admin@test.com
+        Gemini_APIKEY: test
+      run: |
+        python -m unittest discover tests/ -v
+
+    - name: Run specific test suites
+      env:
+        API_TOKEN: test
+        ENDPOINT_URL: http://test.local/api/v1
+        DELEGATED_ADMIN: admin@test.com
+        Gemini_APIKEY: test
+      run: |
+        python -m unittest tests.test_format_mac -v
+        python -m unittest tests.test_config -v
+        python -m unittest tests.test_google_auth -v
+        python -m unittest tests.test_gemini -v

@@ -9,12 +9,7 @@ import googleAuth
 import gemini
 from config import Config
 
-# Validate configuration before proceeding
-is_valid, errors = Config.validate()
-if not is_valid:
-    for error in errors:
-        print(f"Configuration Error: {error}")
-    exit(1)
+# Note: Configuration validation happens in __main__ section for module import compatibility
 
 # Setup logging with both file and console output
 logging.basicConfig(
@@ -95,7 +90,7 @@ def retry_request(method, url, headers=None, json=None, params=None, retries=4, 
                 time.sleep(delay)
                 continue
             return response
-        except requests.RequestException as e:
+        except Exception as e:
             msg = f"Request error on {method} {url}: {e}"
             logger.error(msg)
             time.sleep(delay)
@@ -143,7 +138,7 @@ def update_hardware(asset_tag, model_id, status_id, macAddress=None, createdDate
     response = retry_request("GET", url, headers=headers, params=params)
 
     if response.status_code != 200:
-        tqdm.write(f"Failed to search for hardware: {response.status_code} - {response.text}")
+        logger.error(f"Failed to search for hardware: {response.status_code} - {response.text}")
         return
 
     devices = response.json().get("rows", [])
@@ -274,17 +269,17 @@ def create_hardware(asset_tag, status_name, model_name, macAddress, createdDate,
             try:
                 response_data = model_response.json()
             except ValueError:
-                tqdm.write("Failed to decode JSON from model creation response.")
-                tqdm.write(f"Raw response: {model_response.text}")
+                logger.error("Failed to decode JSON from model creation response.")
+                logger.error(f"Raw response: {model_response.text}")
                 return
 
             if response_data.get("status") == "success":
                 model_payload = response_data.get('payload', {})
                 model_id = model_payload.get('id')
-                tqdm.write(f"Model created successfully: {model_payload.get('name')}")
+                logger.info(f"Model created successfully: {model_payload.get('name')}")
                 assign_fieldset_to_model(model_id, fieldset_id=Config.SNIPE_IT_FIELDSET_ID, api_key=api_key)
             else:
-                tqdm.write(f"Failed to create model: {response_data}")
+                logger.error(f"Failed to create model: {response_data}")
                 return
 
     # Construct the hardware payload
@@ -316,15 +311,15 @@ def create_hardware(asset_tag, status_name, model_name, macAddress, createdDate,
         if response.status_code != 429:
             break
 
-        tqdm.write(f"Rate limited (429). Attempt {attempt} of {max_attempts}. Waiting 10 seconds...")
+        logger.warning(f"Rate limited (429). Attempt {attempt} of {max_attempts}. Waiting 10 seconds...")
         time.sleep(10)
 
     # Final result processing
     try:
         response_data = response.json()
     except ValueError:
-        tqdm.write("Failed to parse JSON from Snipe-IT hardware response.")
-        tqdm.write(f"Raw response: {response.text}")
+        logger.error("Failed to parse JSON from Snipe-IT hardware response.")
+        logger.error(f"Raw response: {response.text}")
         return response.status_code, response.text
 
     if response.status_code == 200 and response_data.get("status") == "success":
@@ -333,7 +328,7 @@ def create_hardware(asset_tag, status_name, model_name, macAddress, createdDate,
     elif response_data.get("status") == "error":
         messages = response_data.get("messages", {})
         if "asset_tag" in messages or "serial" in messages:
-            tqdm.write(f"Duplicate asset found for {asset_tag}. Updating instead.")
+            logger.info(f"Duplicate asset found for {asset_tag}. Updating instead.")
             update_hardware(
                 asset_tag=asset_tag,
                 model_id=model_id,
@@ -346,11 +341,11 @@ def create_hardware(asset_tag, status_name, model_name, macAddress, createdDate,
             )
             return 200, "Updated existing asset."
         else:
-            tqdm.write(f"Error creating hardware: {response_data}")
+            logger.error(f"Error creating hardware: {response_data}")
             return 400, response_data
 
     else:
-        tqdm.write(f"Unexpected response: {response.status_code} - {response.text}")
+        logger.error(f"Unexpected response: {response.status_code} - {response.text}")
         return response.status_code, response.text
 
 def get_model_id(name: str, api_key: str, base_url: str = base_url):
@@ -368,11 +363,10 @@ def get_model_id(name: str, api_key: str, base_url: str = base_url):
 
   import requests
   import json
-  from tqdm import tqdm
 
   # Handle None input early
   if name is None:
-    tqdm.write("Model name is None. Returning None.")
+    logger.debug("Model name is None. Returning None.")
     return None
 
   url = f"{base_url}/models?search={name}"
@@ -386,24 +380,24 @@ def get_model_id(name: str, api_key: str, base_url: str = base_url):
     response = retry_request("GET", url, headers=headers)
 
     if response.status_code == 200:
-      data = json.loads(response.content)
+      data = response.json()
       if data['rows']:
         # Try to match exact name (case-insensitive)
         for model in data['rows']:
           if model['name'].strip().lower() == name.strip().lower():
             return model['id']
-        tqdm.write(f"No exact model match found for: {name}. Returning closest match.")
+        logger.debug(f"No exact model match found for: {name}. Returning closest match.")
         return data['rows'][0]['id']  # Fallback if exact match not found
       else:
-        tqdm.write(f"No model found with name: {name}")
+        logger.debug(f"No model found with name: {name}")
         return None
     else:
-      tqdm.write(f"API request failed with status code: {response.status_code}")
-      tqdm.write(f"Response text: {response.text}")
+      logger.error(f"API request failed with status code: {response.status_code}")
+      logger.error(f"Response text: {response.text}")
       return None
 
-  except requests.exceptions.RequestException as e:
-    tqdm.write(f"An error occurred while making the API request: {e}")
+  except Exception as e:
+    logger.error(f"An error occurred while making the API request: {e}")
     return None
 
 def get_status_id(name: str, api_key: str, base_url: str = base_url):
@@ -421,7 +415,7 @@ def get_status_id(name: str, api_key: str, base_url: str = base_url):
 
     # Handle None input early
     if name is None:
-        tqdm.write("Status name is None. Using default status.")
+        logger.debug("Status name is None. Using default status.")
         return None
 
     # Construct the API endpoint URL
@@ -442,20 +436,20 @@ def get_status_id(name: str, api_key: str, base_url: str = base_url):
 
         # Check for successful response (200 OK)
         if response.status_code == 200:
-            data = json.loads(response.content)
+            data = response.json()
             # Extract the ID from the first matching status (assuming unique names)
             if data['rows']:
                 return data['rows'][0]['id']
             else:
-                tqdm.write(f"No status found with name: {name}. Using default status.")
+                logger.debug(f"No status found with name: {name}. Using default status.")
                 return None
         else:
-            tqdm.write(f"API request failed with status code: {response.status_code}")
-            tqdm.write(f"Response text: {response.text}")
+            logger.error(f"API request failed with status code: {response.status_code}")
+            logger.error(f"Response text: {response.text}")
             return None
 
-    except requests.exceptions.RequestException as e:
-        tqdm.write(f"An error occurred while making the API request: {e}")
+    except Exception as e:
+        logger.error(f"An error occurred while making the API request: {e}")
         return None
 def get_user_id(email: str, api_key: str, base_url: str = base_url):
   """
@@ -464,7 +458,7 @@ def get_user_id(email: str, api_key: str, base_url: str = base_url):
   Args:
       email (str): The email address of the user.
       api_key (str): Your Snipe-IT API key.
-      base_url (str, optional): The base URL of your Snipe-IT instance. 
+      base_url (str, optional): The base URL of your Snipe-IT instance.
           Defaults to "https://your-snipeit-url/api/v1".
 
   Returns:
@@ -475,7 +469,7 @@ def get_user_id(email: str, api_key: str, base_url: str = base_url):
     headers = {'Authorization': f'Bearer {api_key}',
                'Content-Type': 'application/json'
                }
-    params = {'email': email} 
+    params = {'email': email}
     response = retry_request("GET", url, headers=headers, params=params)
 
 
@@ -484,15 +478,15 @@ def get_user_id(email: str, api_key: str, base_url: str = base_url):
       if data['rows']:
         return data['rows'][0]['id']
       else:
-        tqdm.write(f"No user found with email: {email}")
-        return None 
+        logger.debug(f"No user found with email: {email}")
+        return None
     else:
-      tqdm.write(f"API request failed with status code: {response.status_code}")
-      tqdm.write(f"Response text: {response.text}")
+      logger.error(f"API request failed with status code: {response.status_code}")
+      logger.error(f"Response text: {response.text}")
       return None
 
-  except requests.exceptions.RequestException as e:
-    tqdm.write(f"An error occurred while making the API request: {e}")
+  except Exception as e:
+    logger.error(f"An error occurred while making the API request: {e}")
     return None
 
 def check_out_device(user):
@@ -517,7 +511,7 @@ def get_category_id(name: str, api_key: str, base_url: str = base_url):
         headers = {'Authorization': f'Bearer {api_key}',
                'Content-Type': 'application/json'
                }
-        params = {'name': name} 
+        params = {'name': name}
         response = retry_request("GET", url, headers=headers, params=params)
 
         if response.status_code == 200:
@@ -525,18 +519,25 @@ def get_category_id(name: str, api_key: str, base_url: str = base_url):
             if data['rows']:
                 return data['rows'][0]['id']
             else:
-                tqdm.write(f"No user found with email: {name}")
-                return None 
+                logger.debug(f"No category found with name: {name}")
+                return None
         else:
-            tqdm.write(f"API request failed with status code: {response.status_code}")
-            tqdm.write(f"Response text: {response.text}")
+            logger.error(f"API request failed with status code: {response.status_code}")
+            logger.error(f"Response text: {response.text}")
             return None
 
-    except requests.exceptions.RequestException as e:
-        tqdm.write(f"An error occurred while making the API request: {e}")
+    except Exception as e:
+        logger.error(f"An error occurred while making the API request: {e}")
         return None
 
 if __name__ == '__main__':
+    # Validate configuration before proceeding
+    is_valid, errors = Config.validate()
+    if not is_valid:
+        for error in errors:
+            print(f"Configuration Error: {error}")
+        exit(1)
+
     stats = SyncStatistics()
     stats.start_time = datetime.now()
 

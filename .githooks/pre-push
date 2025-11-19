@@ -1,0 +1,26 @@
+#!/bin/bash
+
+# Pre-push hook to run tests before allowing push
+# Install with: git config core.hooksPath .githooks && chmod +x .githooks/pre-push
+
+echo "Running tests before push..."
+
+export API_TOKEN=test
+export ENDPOINT_URL=http://test.local/api/v1
+export DELEGATED_ADMIN=admin@test.com
+export Gemini_APIKEY=test
+
+# Create dummy service account if needed
+if [ ! -f "service_account.json" ]; then
+    echo '{}' > service_account.json
+fi
+
+python -m unittest discover tests/ -v
+
+if [ $? -ne 0 ]; then
+    echo "❌ Tests failed! Push aborted."
+    exit 1
+fi
+
+echo "✅ All tests passed! Proceeding with push."
+exit 0
